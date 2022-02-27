@@ -1,0 +1,458 @@
+8. Install packages in multiple group.
+
+  i)   Install php and mariadb-server packages in dev and test group.
+  ii)  Install "Development Tools" group package in prod group.
+  iii) Update all packages in dev group.
+  iv)  Use separate play for each task and playbook name should be packages.yml.
+
+Ans:
+
+# vim packages.yml
+
+---
+- name: package installation
+  hosts: dev,test
+  tasks:
+    - name: installing php and mariadb 
+      yum:
+        name:
+          - php
+          - mariadb-server
+        state: present
+- name: group package installation
+  hosts: prod
+  tasks:
+    - name: installing group package 'Development Tools'
+      yum:
+        name: '@Development Tools' or '@RPM Development Tools'
+        state:present
+- name: update packages
+  hosts: dev
+  tasks:
+    - name:update all
+      yum:
+        name: '*'
+        state:latest
+ansible-playbook packages.yml --syntax-check
+ansible dev -m command -a 'yum list installed | grep php'
+ansible prod -m command -a 'yum list group installed | grep efivar'
+ 
+
+9. Create a playbook webcontent.yml and it should run on dev group.
+
+  i)   Create directory /devweb and it should be owned by devops group.
+  ii)  /devweb directory setype should be "httpd" and Assing permission 2775.
+  iii) Create index.html under /devweb and the index.html file should have the content "Developement".
+  iv)  Link the /devweb directory to /var/www/html/devweb. 
+
+
+vim /home/student/ansible/webcontent.yml
+---
+- name: create a link
+  hosts: dev
+  tasks:
+    - name:create a directory
+      file:
+        path:/devweb
+        state: directory
+        group: devops
+        mode: 02775
+        setype: httpd_sys_content_t
+    - name: create a file
+      file:
+        path: /devweb/index.html
+        state: touch
+    - name: copy the contents to index.html
+      copy: 
+        content: " Development\n"
+        dest: /devweb/index.html
+    - name: link a file
+      file:
+        src: /devweb
+        dest: /var/www/html/index.html
+        state: link
+ansible-playbook webcontent.yml
+curl http://servera.lab.example.com/devweb/
+
+10. Collect hardware report using playbook in all nodes.
+
+  i)  Download hwreport.txt from the url http://content.example.com/Rhce/hwreport.txt and save it under /root.
+
+  /root/hwreport.txt should have the content with node informations as key=value.
+  #hwreport
+  HOSTNAME:
+  MEMORY:
+  BIOS:
+  CPU:
+  DISK_SIZE_VDA:
+  DISK_SIZE_VDB:
+
+  ii)  If there is no information it have to show "NONE".
+  iii) playbook name should be hwreport.yml.
+
+
+Ans:
+
+ vim /home/student/ansible/hwreport.yml
+---
+- name: hwreport
+  hosts: all
+  ignore_errors: yes
+  tasks:
+    - name: test php page is installed
+      get_url:
+        url: http://content.example.com/Rhce/hwreport.txt
+        dest: /root/hwreport.txt
+    - name: collect report 1
+      set_fact:
+        HOSTNAME: "{{ ansible_hostname }}"
+        MEMORY: "{{ ansible_memtotal_mb }}"
+        BIOS: "{{ ansible_bios_version }}"
+        CPU: "{{ ansible_processor }}"
+        DISK_SIZE_VDA: "{{ ansible_device ['vda'] ['size'] }}"
+    - name: collect report 2
+      set_fact:
+        DISK_SIZE_VDB: "{{ ansible_device ['vdb'] ['size'] }}
+    - Name: copy the values
+      copy:
+        content:     |
+        #hwreport
+        HOSTNAME= {{ HOSTNAME | default 'NONE' }}
+        MEMORY= {{ MEMORY | default 'NONE' }}
+        BIOS= {{ BIOS | defauls 'NONE' }}
+        CPU= {{ CPU | default ' NONE' }}
+        DISK_SIZE_VDA= {{ DISK_SIZE_VDA | default 'NONE' }}
+        DISK_SIZE_VDB= {{ DISK_SIZE_VDB | default 'NONE'}}
+        dest: /root/hwreport.txt
+
+ansible-playbook hwreport.yml
+ansible all -m command -a 'cat /root/hwreport.txt'
+----------------------------------------------------------------------------------------------------------------
+1. Create a static inventory file name inventory under /home/student/ansible.
+
+   • Create a inventory group called dev and servera.lab.example.com hosts should be member of that group.
+   • Create a inventory group called test and serverb.lab.example.com hosts should be member of that group.
+   • Create a inventory group called prod and serverc.lab.example.com hosts should be member of that group
+   • Create a inventory group called balancers and serverd.lab.example.com hosts should be member of that group
+   • Create a Nested inventory group called webservers and prod group should be children of that group
+
+
+Ans:
+
+mkdir /home/student/ansible
+
+# cd /home/student/ansible
+
+vim inventory
+[dev]
+servera.lab.example.com
+[test]
+serverb.lab.example.com
+[prod]
+serverc.lab.example.com
+[balancers]
+serverd.lab.example.com
+[webservers:children]
+prod
+---------------------------------------------------------------------------------------------------------------------
+
+2. Create  the ansible configuration in your system
+  i) Install ansible package and create a ansible.cfg file
+  ii) The ansible.cfg file should be pointed with inventory and roles path(/home/student/ansible/roles).
+
+Ans:
+
+vim /home/student/ansible/ansible.cfg
+
+[defaults]
+remote_user=devops
+inventory=/home/student/ansible/inventory
+roles_path=/home/student/ansible/roles
+[previlege_escalation]
+become=true
+
+ansible all -m command -a 'id'
+
+---------------------------------------------------------------------------------------------------------------------
+4. Create a directory 'roles' under /home/student/ansible .
+
+  i)   Create a Playbook called requirements.yml and dowloand the given roles in under the roles directory using galaxy command under it.
+  ii)  Role name should be balancer and download using this url http://content.example.com/Rhce/balancer.tgz.
+  iii) Role name phpinfo and download using this url http://content.example.com/Rhce/phpinfo.tgz.
+
+Ans: 
+
+mkdir /home/student/ansible/roles
+
+
+vim /home/student/ansible/requirements.yml
+---
+- src:http://content.example.com/Rhce/balancer.tgz
+  name:balancer
+- src:http://content.example.com/Rhce/phpinfo.tgz
+  name:phpinfo
+wq!
+
+ansible-galaxy install -r /home/student/ansible/requirements.yml -p /home/student/ansible/roles
+
+tree /home/student/ansible/roels
+
+------------------------------------------------------------------------------------------------------------------------------
+
+5. Create offline role named apache under roles directory.
+
+  i)   Install httpd package and the service should be start and enable the httpd service.
+  ii)  Host the web page using the template.j2
+  iii) The template.j2 should contain "My host is {{ FQDN }} on {{ IPADDRESS }}.
+  iv)  Create a playbook named apache_role.yml and run the role in dev group.
+
+Ans:
+
+ansible-galaxy init /home/student/ansible/roles/apache
+vim /home/student/ansible/roles/apache/templates/template.j2
+
+My host is {{ ansible_fqdn}} on {{ ansible_default_ipv4.address}}
+
+wq!
+
+vim /home/student/ansible/roles/apache/tasks/main.yml
+
+- name: install httpd package
+  yum:
+  tasks:
+     name:
+       - httpd
+       - firewalld
+     state:present  
+- name: start service httpd
+  service:
+    name: httpd
+    state: started
+    enabled: yes
+- name: start service firewalld
+  service:
+    name: firewalld
+    state: started
+    enabled: yes
+- name: add http service in firewall rule
+  firewalld:
+    service: http
+    state: enabled
+    permanent: true
+    immediate: yes
+- name: call the template
+  template:
+     src: template.j2
+     dest: /var/www/html/index.html
+wq!
+
+vim /home/student/ansible/apache_role.yml
+
+---
+- name: apache deploy
+  hosts: dev
+  roles:
+    - apache
+
+wq!
+
+ansible-playbook apache_role.yml
+curl http://servera.lab.example.com 
+
+-------------------------------------------------------------------------------------------------------
+
+6. Create a playbook called roles.yml and it should run balancer and phpinfo roles.
+
+  i)  Run the balancer role on balancers group.
+  ii) Run the phpinfo role on webservers group.
+
+  phpinfo output:
+
+  Access the url http://serverd.lab.example.com and you can see the content "Welcome to Advpro".
+
+
+vim roles.yml
+
+---
+- name: role1
+  hosts: webservers
+  roles:
+    - phpinfo
+- name: role2
+  hosts: balancers
+  roles: 
+    - balancer
+wq!
+
+ansible-playbook roles.yml 
+
+curl http://serverd.lab.example.com     
+      
+--------------------------------------------------------------------------------------------------
+
+7. Install system related roles and the playbook name timesync.yml and it should use "rhel-system-roles.timesync" role.
+
+  i)  Use ntp server classroom.example.com and enable iburst.
+  ii) Run this playbook on all the managed nodes. 
+
+
+sudo yum install rhel-system-roles -y
+
+ls /usr/share/ansible/roles
+
+vim /home/student/ansible/timesync.yml
+---
+- name: timesync
+  hosts: all
+  vars: 
+    timesync_ntp_servers:
+     - hostnale: classromm.example.com
+       iburst: yes
+  roles:
+    /usr/share/ansible/roles/rhel-system-roles.timesync
+wq!
+
+ansible all -m command -a 'cat /etc/chrony.conf'
+ansible-playbook timesync.yml
+ansible all -m command -a 'cat /etc/chrony.conf'  
+--------------------------------------------------------------------------------------------------------------
+8. Install packages in multiple group.
+
+  i)   Install php and mariadb-server packages in dev and test group.
+  ii)  Install "Development Tools" group package in prod group.
+  iii) Update all packages in dev group.
+  iv)  Use separate play for each task and playbook name should be packages.yml.
+
+Ans:
+
+vim packages.yml
+
+---
+- name:package installation
+  hosts: dev, test
+  tasks:
+    - name: installing php and mariadb
+      yum:
+        name:
+          - phpinfo 
+          - mariadb
+       state: present
+- name: group package installation
+  hosts: prod
+  tasks: 
+    - name: installing group package "Development Tools"
+      yum:   
+        name: '@Developments Tools' or '@RPM Developments Tools'
+        state: present
+- name: update packages
+  hosts: dev
+  tasks:
+    - name: update all
+      yum:
+        name: '*'
+        state: latest
+wq!
+
+ansible-playbook packages.yml
+ansible dev -m command -a 'yum list installed | grep php'
+ansible prod -m command -a 'yum list group installed | grep efivar
+
+------------------------------------------------------------------------------------------------
+
+9. Create a playbook webcontent.yml and it should run on dev group.
+
+  i)   Create directory /devweb and it should be owned by devops group.
+  ii)  /devweb directory setype should be "httpd" and Assing permission 2775.
+  iii) Create index.html under /devweb and the index.html file should have the content "Developement".
+  iv)  Link the /devweb directory to /var/www/html/devweb. 
+
+
+
+vim /home/student/ansible/webcontent.jml
+
+---
+- name: create a link
+  hosts:dev
+  tasks:
+    - name: create a directory
+      file:
+        path: /devweb
+        state: directory
+        group: devops
+        mode: 02775
+        setype: httpd_sys_content_t
+    - name: create a file
+      file:
+        path: /devweb/index.html
+        state: touch 
+    - name: copy the contents to index.html
+      copy:
+        content: " Developments\n"
+        dest: /devweb/index.html
+    - name: link a file
+      file:
+        src: /devweb
+        dest: /var/www/html/devweb
+        state: link
+wq!
+
+ansible-playbook webcontents.yml
+
+curl http://servera.lab.example.com/devweb 
+==========================================================================================================
+
+10. Collect hardware report using playbook in all nodes.
+
+  i)  Download hwreport.txt from the url http://content.example.com/Rhce/hwreport.txt and save it under /root.
+
+  /root/hwreport.txt should have the content with node informations as key=value.
+  #hwreport
+  HOSTNAME:
+  MEMORY:
+  BIOS:
+  CPU:
+  DISK_SIZE_VDA:
+  DISK_SIZE_VDB:
+
+  ii)  If there is no information it have to show "NONE".
+  iii) playbook name should be hwreport.yml.
+
+ans:
+
+vim /home/student/ansible/hwreport.yml
+---
+- name: hwreport
+  hosts: all
+  ignore_errors: yes
+  tasks:
+    - name: test php page is installed
+      get_url:
+        url: http://content.example.com/Rhce/hwreport.txt
+        dest:  /root/hwreport.txt
+    - name: collect report1
+      set_fact:
+        HOSTNAME: "{{ ansible_hostname }}"
+        MEMORY: "{{ ansible_memtotal_mb }}"
+        BIOS: "{{ ansible_bios_version }}" 
+        CPU: "{{ ansible_processor }}"
+        DISK_SIZE_VDA: "{{ ansible_devices ['vda'] ['size'] }}"
+    - name: collect report2
+      set_fact:
+         DISK_SIZE_VDB: "{{ ansible_devices ['vdb'] ['size'] }}"
+    - name: copy the values
+      copy:
+        content:     |  
+        #hwreport
+         HOSTNAME= {{ HOSTNAME | default "NONE' }}
+         MEMORY= {{ MEMORY | default 'NONE' }}
+         BIOS= {{ BIOS | default 'NONE' }}
+  	 CPU= {{ CPU | default 'NONE' }}
+  	 DISK_SIZE_VDA= {{ DISK_SIZE_VDA | default 'NONE' }}
+  	 DISK_SIZE_VDB: {{ DISK_SIZE_VDB | default 'NONE' }}
+         dest: /root/hwreport.txt
+wq!
+
+ansible-playbook hwreport.yml
+ansible all -m command -a 'cat /root/hwreport.txt
+
+=================================================================================================
